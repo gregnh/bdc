@@ -5,6 +5,7 @@
 # - feature engineering sur la datetime (add year, season, weeknumber)
 # - LSTM w/ Keras
 # - ARIMA & SARIMA Model
+# - use KNN to interpolate
 
 # In[1]:
 
@@ -15,7 +16,7 @@ import sys, os
 import sklearn.preprocessing as pp
 import sklearn.decomposition as decomposition
 import sklearn.model_selection as ms
-import sklearn.metrics as metrics
+from sklearn.metrics import mean_squared_error
 
 import sklearn.tree as tree
 import sklearn.svm as svm
@@ -23,6 +24,7 @@ import sklearn.ensemble as ensemble
 import sklearn.neighbors as neighbors
 # import xgboost
 # import keras
+
 sys.path.append('../')
 # import lib.tools
 pd.options.display.max_columns = 50
@@ -47,38 +49,38 @@ def season(df):
     season_col = season_col.replace([6, 7, 8], 2)
     season_col = season_col.replace([9, 10, 11], 3)
     ohc = pd.DataFrame(np.eye(4)[season_col], columns=['winter', 'spring', 'summer', 'fall'], index=df.index)
-#     for col in ohc:
-#         ohc[col] = ohc[col].astype('category')
     return pd.concat([df, ohc], axis=1)
 
 
-# In[4]:
+# In[20]:
 
-# for file_ in os.listdir(train_path):
-file_ = pd.read_csv(raw_path + 'train_1.csv', header=0, delimiter=';',decimal=',',
-                    parse_dates=['date'], index_col='date')
+def processing(filename = 'train_1', drop_method = 'any'):
+    data = pd.read_csv(raw_path + filename + '.csv', header=0, delimiter=';',decimal=',',
+                        parse_dates=['date'], index_col='date')
+    
+    data = data.rename(columns={'mois':'month'})
+    raw_colnames = list(data.columns.values)
 
-file_.dropna(how='any', axis=0, inplace=True)
-file_ = file_.rename(columns={'mois':'month'})
+    #Transform to dummy
+    dummies = ['ddH10_rose4', 'insee', 'month']
+    df_dummy = pd.get_dummies(data, columns=dummies, prefix=dummies)
+    data.drop(['ddH10_rose4'], inplace=True, axis=1)
 
-#Transform to dummy
-dummies = ['ddH10_rose4', 'insee', 'month']
-df_dummy = pd.get_dummies(file_, columns=dummies, prefix=dummies)
-#     for col in df_dummy:
-#         df_dummy[col] = df_dummy[col].astype('category')
-file_.drop(['ddH10_rose4'], inplace=True, axis=1)
+    # Add temporal features
+    # data['week'] = data.index.week # WEEK AS CATEGORY ?
+    data = season(data) # add season 
+    data.drop(['month'], inplace=True, axis=1)
 
-# Add temporal features
-# file_['week'] = file_.index.week # WEEK AS CATEGORY ?
-file_ = season(file_) # add season 
-file_.drop(['month'], inplace=True, axis=1)
-
-# Add lag operator (shift ce fait par ville)
-groupby_cities = file_.groupby('insee')
-shift = groupby_cities.tH2_obs.shift(1)
-file_['tH2_obs_shift_1'] = shift
-
-# file_.drop(['insee'], inplace=True, axis=1)
+    # Add lag operator (shift ce fait par ville)
+    groupby_cities = data.groupby('insee')
+    shift = groupby_cities.tH2_obs.shift(1)
+    data['tH2_obs_lag1'] = shift
+    
+    data.dropna(how=drop_method, axis=0, inplace=True)
+    data.drop(['insee'], inplace=True, axis=1)
+    return data, [x for x in raw_colnames if x not in dummies]
+file_, raw_col = processing()
+#assert nb de col is good
 
 
 # In[5]:
@@ -86,22 +88,29 @@ file_['tH2_obs_shift_1'] = shift
 file_.describe(include='all')
 
 
-# In[6]:
+# In[8]:
 
-file_.head(14)
+file_.head(10)
 
 
 # ## Factor Analysis
 
-# In[97]:
+# In[7]:
 
 # file_['2014-01'][]
 # calculer la variation moyenne de temperature en de décembre à janvier pour estimer 2014-01-01
 
 
+# Normalize float data
+
+# In[ ]:
+
+pp.Normalizer().fit_transform(file_[raw_col]) #normalize only original float columns
+
+
 # In[98]:
 
-file_.dropna(how='any', axis=0, inplace=True)
+# assert no nan
 fa = decomposition.FactorAnalysis().fit(file_.drop('tH2_obs'))
 
 
@@ -115,40 +124,48 @@ fa
 # In[ ]:
 
 seed = 1
+results_dict = {{}}
+predictions_dict = {{}}
 results = []
-names = []
-predictions = [] #table of prediction for each model
+predictions = []
 
 
 # In[ ]:
 
 models = []
-models.append(('CART', tree.DecisionTreeRegressor(n_jobs=3)))
+models.append(('CART', tree.DecisionTreeRegressor()))
 models.append(('RF', ensemble.RandomForestRegressor(n_jobs=3)))
-models.append(('KNN', neighbors.KNeighborsRegressor(n_jobs=3)))
-models.append(('SVM', svm.SVR(n_jobs=3)))
-models.append(('GB', ensemble.GradientBoostingRegressor(n_jobs=3)))
+models.append(('GB', ensemble.GradientBoostingRegressor()))
 # models.append(('NB'), ) # Naive Bayes for modeling uncertainty
 # LSTM
+# xgboost
+
+# poor results
+# models.append(('KNN', neighbors.KNeighborsRegressor(n_jobs=3)))
+# models.append(('SVM', svm.SVR()))
+
+# for name, model in models:
+#     results_dict[name] = {}
+    
 
 
-# Apply forward chaining
+# Apply forward walk
 
-# In[14]:
+# In[ ]:
+
+from sklearn.metrics import mean_squared_error
 
 first_train = True
 for i in range(1,36):
-    train_file = train_path + 'train_' + str(i) + '.csv'
-    test_file = train_path + 'train_' + str(i+1) + '.csv'
+    print(i)
+    train_file = 'train_' + str(i)
+    test_file = 'train_' + str(i+1)
     
-    x_test = pd.read_csv(test_file, header=0, delimiter=';',decimal=',',
-                    parse_dates=['date'], index_col='date').drop('tH2_obs', axis=1)
-    y_test = pd.read_csv(test_file, header=0, delimiter=';',decimal=',',
-                    parse_dates=['date'], index_col='date', usecols=['tH2_obs'])
-    train = pd.read_csv(train_file, header=0, delimiter=';',decimal=',',
-                    parse_dates=['date'], index_col='date')
+    x_test, tmp = processing(filename=test_file)
+    y_test = pd.DataFrame(x_test.tH2_obs)
+    x_test = x_test.drop('tH2_obs', axis=1)
     
-    
+    train, tmp = processing(train_file)
     if first_train is True:
         x_train = train.drop('tH2_obs', axis=1)
         y_train = train.pop('tH2_obs')
@@ -157,20 +174,30 @@ for i in range(1,36):
         x_train = pd.concat([x_train, train.drop('tH2_obs', axis=1)])
         y_train = pd.concat([y_train, train.pop('tH2_obs')])
         
-    for name, m in models: 
-    pred = ms.cross_val_predict(m, dff[features], dff[label], cv=kfold, n_jobs=3)
-    cv_res = ms.cross_val_score(m, dff[features], dff[label], cv=kfold, n_jobs=3, scoring = 'accuracy')
-    m.fit
-    
-    predictions.append(pred)
-    results.append(cv_res)
-    names.append(name)
-    print "Score %s: %.3f%%, %.3f%%" % (name, cv_res.mean()*100, cv_res.std()*100)
+    for name, model in models: 
+        model.fit(x_train, y_train)
+        pred = model.predict(x_test)
+        result = np.sqrt(mean_squared_error(y_test, pred))
+        
+        # revoir structure
+        results_dict[name][i] = result
+        predictions_dict[name][i] = pred
+        print(name, ' : ', result)
 
 
 # In[ ]:
 
-
+# plt.figure()
+# plt.scatter(X, y, s=20, edgecolor="black",
+#             c="darkorange", label="data")
+# plt.plot(x_test, pre, color="cornflowerblue",
+#          label="max_depth=2", linewidth=2)
+# plt.plot(X_test, y_2, color="yellowgreen", label="max_depth=5", linewidth=2)
+# plt.xlabel("data")
+# plt.ylabel("target")
+# plt.title("Decision Tree Regression")
+# plt.legend()
+# plt.show()
 
 
 # In[ ]:
@@ -196,7 +223,7 @@ groupby_cities = file_.groupby('insee')
 
 # In[30]:
 
-pd.DataFrame(groupby_cities.tH2_obs.rolling(window=2).mean())
+pd.DataFrame(groupby_cities.tH2_obs.rolling(window=2).mean()) # ?
 
 
 # Interpolate NA val
