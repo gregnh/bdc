@@ -11,19 +11,18 @@
 
 get_ipython().magic(u'matplotlib inline')
 import pandas as pd, numpy as np
+import matplotlib.pyplot as plt
 import sys, os
 
 import sklearn.preprocessing as pp
 import sklearn.decomposition as decomposition
-import sklearn.model_selection as ms
+# import sklearn.model_selection as ms
 from sklearn.metrics import mean_squared_error
 
-import sklearn.tree as tree
-import sklearn.svm as svm
+# import sklearn.svm as svm
 import sklearn.ensemble as ensemble
 import sklearn.neighbors as neighbors
-# import xgboost
-# import keras
+import xgboost as xgb
 
 sys.path.append('../')
 # import lib.tools
@@ -52,7 +51,7 @@ def season(df):
     return pd.concat([df, ohc], axis=1)
 
 
-# In[20]:
+# In[4]:
 
 def processing(filename = 'train_1', drop_method = 'any'):
     data = pd.read_csv(raw_path + filename + '.csv', header=0, delimiter=';',decimal=',',
@@ -88,7 +87,7 @@ file_, raw_col = processing()
 file_.describe(include='all')
 
 
-# In[8]:
+# In[6]:
 
 file_.head(10)
 
@@ -121,24 +120,22 @@ fa
 
 # ## ML
 
-# In[ ]:
+# In[7]:
 
 seed = 1
-results_dict = {{}}
-predictions_dict = {{}}
-results = []
-predictions = []
+results_dict = dict()
+predictions_dict = dict()
 
 
-# In[ ]:
+# In[9]:
 
 models = []
-models.append(('CART', tree.DecisionTreeRegressor()))
-models.append(('RF', ensemble.RandomForestRegressor(n_jobs=3)))
-models.append(('GB', ensemble.GradientBoostingRegressor()))
+# models.append(('CART', tree.DecisionTreeRegressor()))
+models.append(('RF', ensemble.RandomForestRegressor(n_estimators=40, n_jobs=3,bootstrap=False)))
+models.append(('GB', ensemble.GradientBoostingRegressor(n_estimators=40, )))
 # models.append(('NB'), ) # Naive Bayes for modeling uncertainty
 # LSTM
-# xgboost
+# models.append(('XGB', xgb.XGBRegressor()))
 
 # poor results
 # models.append(('KNN', neighbors.KNeighborsRegressor(n_jobs=3)))
@@ -151,9 +148,7 @@ models.append(('GB', ensemble.GradientBoostingRegressor()))
 
 # Apply forward walk
 
-# In[ ]:
-
-from sklearn.metrics import mean_squared_error
+# In[10]:
 
 first_train = True
 for i in range(1,36):
@@ -165,7 +160,7 @@ for i in range(1,36):
     y_test = pd.DataFrame(x_test.tH2_obs)
     x_test = x_test.drop('tH2_obs', axis=1)
     
-    train, tmp = processing(train_file)
+    train, raw_col_names = processing(train_file)
     if first_train is True:
         x_train = train.drop('tH2_obs', axis=1)
         y_train = train.pop('tH2_obs')
@@ -180,30 +175,69 @@ for i in range(1,36):
         result = np.sqrt(mean_squared_error(y_test, pred))
         
         # revoir structure
-        results_dict[name][i] = result
-        predictions_dict[name][i] = pred
+        if name in results_dict:
+            results_dict[name].append(result)
+            predictions_dict[name].append(pred)
+        else:
+            results_dict[name] = [result]
+            predictions_dict[name] = [pred]
         print(name, ' : ', result)
 
 
-# In[ ]:
+# In[36]:
 
-# plt.figure()
-# plt.scatter(X, y, s=20, edgecolor="black",
-#             c="darkorange", label="data")
-# plt.plot(x_test, pre, color="cornflowerblue",
-#          label="max_depth=2", linewidth=2)
-# plt.plot(X_test, y_2, color="yellowgreen", label="max_depth=5", linewidth=2)
-# plt.xlabel("data")
-# plt.ylabel("target")
-# plt.title("Decision Tree Regression")
-# plt.legend()
-# plt.show()
+plt.figure(dpi=100)
+for key, val in results_dict.iteritems():
+    plt.plot(range(len(val)), val, '-', label=key)
+plt.ylabel("RMSE")
+plt.xlabel("Nb of dataset used for training")
+plt.legend()
+plt.show()
 
 
-# In[ ]:
+# I dont keep CART, SVM, KNN  
+# KNN and SVM : computational time too long  
+# CART : results not satisfying
+
+# # Feature importance
+
+# In[38]:
+
+plt.figure(dpi=90, figsize=(10, 10))
+imp = models[1][1].feature_importances_
+
+imp, names = zip(*sorted(zip(imp, x_train.columns.values)))
+
+plt.barh(range(len(names)),imp,align='center')
+plt.yticks(range(len(names)),names)
+plt.xlabel('Importance of features')
+plt.ylabel('Features')
+plt.show()
+
+plt.show()
 
 
+# In[29]:
 
+for imp_, name in zip(imp, names):
+    print(name, imp_)
+
+
+# low importance : 
+# - capeinsSOL0
+# - ciwcH20
+# - clwcH20
+# - ffH10
+# - flir1SOL0
+# - hcoulimSOL0
+# - iwcSOL0
+# - rr1SOL0
+# - rrH20
+# - tH2_XGrad
+# - tH2_VGrad_2.100
+# - nH20
+# - fllat1SOL0
+# - ux1H10
 
 # ## Feature engineering
 
