@@ -50,6 +50,12 @@ def season(df):
     ohc = pd.DataFrame(np.eye(4)[season_col], columns=['winter', 'spring', 'summer', 'fall'], index=df.index)
     return pd.concat([df, ohc], axis=1)
 
+used_var = ['ffH10', 'flir1SOL0', 'fllat1SOL0', 'flsen1SOL0',
+       'flvis1SOL0', 'hcoulimSOL0', 'huH2', 'iwcSOL0', 'nbSOL0_HMoy',
+       'nH20', 'ntSOL0_HMoy', 'pMER0', 'rr1SOL0', 'tH2',
+            'tH2_VGrad_2.100', 'tH2_XGrad', 'tH2_YGrad', 'tpwHPA850', 'ux1H10',
+            'vapcSOL0', 'vx1H10']
+
 
 # In[4]:
 
@@ -60,26 +66,35 @@ def processing(filename = 'train_1', drop_method = 'any'):
     data = data.rename(columns={'mois':'month'})
     raw_colnames = list(data.columns.values)
 
-    #Transform to dummy
-    dummies = ['ddH10_rose4', 'insee', 'month']
-    df_dummy = pd.get_dummies(data, columns=dummies, prefix=dummies)
-    data.drop(['ddH10_rose4'], inplace=True, axis=1)
-
+    # Add lag operator (shift ce fait par ville)
+    groupby_cities = data.groupby('insee')
+    shift = groupby_cities.tH2.shift(1)
+    data['tH2_lag1'] = shift
+    
     # Add temporal features
     # data['week'] = data.index.week # WEEK AS CATEGORY ?
     data = season(data) # add season 
     data.drop(['month'], inplace=True, axis=1)
-
-    # Add lag operator (shift ce fait par ville)
-    groupby_cities = data.groupby('insee')
-    shift = groupby_cities.tH2_obs.shift(1)
-    data['tH2_obs_lag1'] = shift
     
+    # Variables to be dropped
+    data.drop(['capeinsSOL0', 'ciwcH20', 'clwcH20'], inplace=True, axis=1)
+    
+    #Transform to dummy
+    dummies = ['ddH10_rose4', 'insee', 'month']
+    df_dummy = pd.get_dummies(data, columns=dummies, prefix=dummies)
+    data.drop(['ddH10_rose4'], inplace=True, axis=1)
+    
+    # Drop NAN
     data.dropna(how=drop_method, axis=0, inplace=True)
     data.drop(['insee'], inplace=True, axis=1)
     return data, [x for x in raw_colnames if x not in dummies]
 file_, raw_col = processing()
 #assert nb de col is good
+
+
+# In[5]:
+
+file_.info()
 
 
 # In[5]:

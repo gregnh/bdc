@@ -1,6 +1,9 @@
 
 # coding: utf-8
 
+# # TODO
+# - check missing dates
+
 # In[1]:
 
 get_ipython().magic(u'matplotlib notebook')
@@ -19,7 +22,7 @@ data_path = '../data/raw/'
 
 # In[3]:
 
-train = pd.read_csv(data_path + "train_30.csv", header=0, delimiter=";",decimal=',',
+train = pd.read_csv(data_path + "train_1.csv", header=0, delimiter=";",decimal=',',
                     parse_dates=['date'], index_col='date')
 
 
@@ -83,22 +86,15 @@ train.describe(include='all')
 pd.DataFrame(train.isnull().sum()).T
 
 
-# flir1SOL0 	fllat1SOL0 	flsen1SOL0 	flvis1SOL0 iwcSOL0 	nbSOL0_HMoy ntSOL0_HMoy rr1SOL0 tpwHPA850 : 7 missings  
-# rrH20 : 119 missings  
-# clwcH20 ddH10_rose4 ffH10 huH2 tH2 	tH2_VGrad_2.100 tH2_XGrad tH2_YGrad ux1H10 vx1H10 : 126 missings  
-# pMER0 : 133  
-# nH20 : 336  
-# capeinsSOL0 : 616 
+# In[15]:
 
-# In[9]:
-
-for i in np.where(train.isnull().sum() == 7)[0]:
+for i in np.where(train.isnull().sum() == 126)[0]:
     print(np.where(np.asanyarray(pd.isnull(train.iloc[:,i]))))
 
 
-# Same location for these missings vals
+# Same row location for missing vals for these variables
 
-# In[10]:
+# In[20]:
 
 # Rows with missing val
 np.where(train.isnull().sum(axis=1).values > 0)[0]
@@ -112,30 +108,39 @@ np.where(np.asanyarray(pd.isnull(train)))
 
 # Lets have a look to 1 row
 
-# In[12]:
+# In[49]:
 
-pd.DataFrame(train.iloc[539+(7*11),:]).T
+pd.DataFrame(train.iloc[2653-7*3,:]).T
 
 
 # ### Lets see if one can interpolate the missing values
 
-# In[13]:
+# In[31]:
 
-for i in range(1,8):
-    print(train.index[539-7*i], 
-          ' - capeinsSOL0 val : {} for station {}'.format(train.capeinsSOL0[539-7*i], train.insee[539-7*i]))
-print('interpolate : {}'.format(train.capeinsSOL0.interpolate()[539]))
+for i in range(1,12):
+    print(train.index[2653-7*i], 
+          '- tH2 val : {} for station {}'.format(train.tH2[2653-7*i], train.insee[2653-7*i]))
+print('interpolate : {}'.format(train.tH2.interpolate()[2653]))
 
 
-# In[14]:
+# In[22]:
 
-for i in range(1,25):
-    print(train.capeinsSOL0[539+7*i])
+for i in range(1,20):
+    print(train.tH2[2653+7*i])
 
+
+# In[45]:
+
+gb_cities = train.groupby('insee')
+print(gb_cities.tH2.resample('W').median()[6088001]['2015-01'])
+# print(gb_cities.index.week[2653-7*3])
+
+
+# Seems to work when replacing with median with respect to insee
 
 # ### Difficile d'interpoler (ici pour capeinsSOL0)
 
-# In[15]:
+# In[24]:
 
 for i in range(1,5):
     print(train.index[4627-7*i], 
@@ -153,7 +158,6 @@ for i in range(1,5):
 
 # In[16]:
 
-# train.insee = train.insee.astype('category')
 # groupby_city = train.groupby('insee')
 # groupby_city.capeinsSOL0.apply(pd.Series.interpolate)
 
@@ -171,12 +175,13 @@ for i in range(1,37):
 df_miss_val
 
 
-# In[ ]:
-
-
-
+# Liens entre: 
+#     - ddH10_rose4 et ffH10
+#     - tH2, tH2_VGrad_2.100, tH2_XGrad, tH2_YGrad
 
 # # Link between temp and ech
+# 
+# idée de Grégoire
 
 # ## Data processing
 # Stack data

@@ -32,21 +32,6 @@ var_used = ['capeinsSOL0', 'ciwcH20', 'clwcH20',
 
 # # Autocorrelation
 
-# In[18]:
-
-for var in var_used:
-    print(var, ' : ', data[var].autocorr(-7))
-
-
-# In[25]:
-
-# from statsmodels.graphics.tsaplots import plot_acf
-plt.figure()
-# pd.plotting.autocorrelation_plot(data.capeinsSOL0)
-plot_acf(data.capeinsSOL0)
-plt.show()
-
-
 # Certains variables ont une forte autocorr : relevante to the analysis ?
 
 # # Correlation between variables 
